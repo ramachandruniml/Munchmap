@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:9092"
 
     anthropic_api_key: str = ""
+    supabase_url: str = ""
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

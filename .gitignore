@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+backend/data/RAW_recipes.csv
 
 # Node / Next.js
 frontend/node_modules/

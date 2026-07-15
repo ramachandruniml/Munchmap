@@ -6,7 +6,11 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-engine = create_async_engine(settings.database_url, echo=False)
+# statement_cache_size=0: Supabase's transaction-mode pooler (Supavisor/PgBouncer) doesn't
+# support prepared statements, which asyncpg uses by default.
+engine = create_async_engine(
+    settings.database_url, echo=False, connect_args={"statement_cache_size": 0}
+)
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
