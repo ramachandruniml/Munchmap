@@ -18,6 +18,7 @@ class RecipeCandidate:
     equipment_required: list[str]
     diet_tags: list[str]
     ingredients: list[tuple[int, str]] = field(default_factory=list)
+    preference_score: float = 0.0
 
 
 @dataclass
@@ -70,6 +71,7 @@ def solve_weekly_plan(
     profile: ProfileConstraints,
     max_recipe_repeats: int = 3,
     ingredient_overlap_weight: float = 50.0,
+    preference_weight: float = 20.0,
     nutrition_tolerance: float = 0.15,
     time_limit_seconds: float = 10.0,
 ) -> list[MealAssignment]:
@@ -142,8 +144,15 @@ def solve_weekly_plan(
             model.Add(used >= u)
         overlap_terms.append(used)
 
+    preference_terms = sum(
+        x[day, slot, recipe.id] * int(round(recipe.preference_score * preference_weight))
+        for day in DAYS
+        for slot in MEAL_SLOTS
+        for recipe in candidates
+    )
+
     model.Minimize(
-        total_cost_cents + int(ingredient_overlap_weight) * sum(overlap_terms)
+        total_cost_cents + int(ingredient_overlap_weight) * sum(overlap_terms) - preference_terms
     )
 
     solver = cp_model.CpSolver()

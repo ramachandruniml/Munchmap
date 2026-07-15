@@ -27,6 +27,7 @@ from sqlalchemy import select
 
 from app.db.session import async_session_factory
 from app.models import Ingredient, Recipe, RecipeIngredient
+from app.services.embeddings import embed_text, recipe_embedding_text
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 RECIPES_CSV = DATA_DIR / "RAW_recipes.csv"
@@ -190,6 +191,13 @@ async def seed() -> None:
                     RecipeIngredient(ingredient=ing, quantity=qty, unit="unit")
                     for ing, qty in recipe_ingredients
                 ]
+                recipe.embedding = embed_text(
+                    recipe_embedding_text(
+                        recipe.name,
+                        recipe.diet_tags,
+                        [ing.name for ing, _ in recipe_ingredients],
+                    )
+                )
                 session.add(recipe)
                 recipe_count += 1
 

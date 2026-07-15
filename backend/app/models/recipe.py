@@ -1,3 +1,4 @@
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +31,7 @@ class Recipe(Base):
 
     equipment_required: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     diet_tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
 
     ingredients: Mapped[list["RecipeIngredient"]] = relationship(back_populates="recipe")
 

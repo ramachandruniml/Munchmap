@@ -7,9 +7,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.security import CurrentUser, get_current_user
 from app.db.session import get_db
-from app.models import MealPlan, MealPlanEntry, Profile, Recipe, RecipeIngredient
+from app.models import MealPlan, MealPlanEntry, Profile, Recipe, RecipeIngredient, RecipeRating
 from app.schemas.meal_plan import MealPlanEntryOut, MealPlanGenerateRequest, MealPlanOut
 from app.services.optimizer import ProfileConstraints, RecipeCandidate, solve_weekly_plan
+from app.services.personalization import build_preference_vector, cosine_similarity
 
 router = APIRouter(prefix="/meal-plans", tags=["meal-plans"])
 
@@ -23,13 +24,31 @@ async def _load_profile(db: AsyncSession, user_id: uuid.UUID) -> Profile:
     return profile
 
 
-async def _load_candidates(db: AsyncSession) -> list[RecipeCandidate]:
+async def _load_candidates(db: AsyncSession, user_id: uuid.UUID) -> list[RecipeCandidate]:
     result = await db.execute(
         select(Recipe).options(
             selectinload(Recipe.ingredients).selectinload(RecipeIngredient.ingredient)
         )
     )
     recipes = result.scalars().all()
+
+    ratings_result = await db.execute(
+        select(RecipeRating).where(RecipeRating.profile_id == user_id)
+    )
+    ratings = {r.recipe_id: r.liked for r in ratings_result.scalars()}
+    embeddings_by_id = {r.id: r.embedding for r in recipes}
+    liked_embeddings = [
+        embeddings_by_id[rid]
+        for rid, liked in ratings.items()
+        if liked and embeddings_by_id.get(rid) is not None
+    ]
+    disliked_embeddings = [
+        embeddings_by_id[rid]
+        for rid, liked in ratings.items()
+        if not liked and embeddings_by_id.get(rid) is not None
+    ]
+    preference_vector = build_preference_vector(liked_embeddings, disliked_embeddings)
+
     return [
         RecipeCandidate(
             id=r.id,
@@ -41,6 +60,11 @@ async def _load_candidates(db: AsyncSession) -> list[RecipeCandidate]:
             equipment_required=r.equipment_required,
             diet_tags=r.diet_tags,
             ingredients=[(ri.ingredient_id, ri.ingredient.name) for ri in r.ingredients],
+            preference_score=(
+                cosine_similarity(r.embedding, preference_vector)
+                if r.embedding is not None and preference_vector is not None
+                else 0.0
+            ),
         )
         for r in recipes
     ]
@@ -88,7 +112,7 @@ async def generate_meal_plan(
     db: AsyncSession = Depends(get_db),
 ) -> MealPlanOut:
     profile = await _load_profile(db, user.id)
-    candidates = await _load_candidates(db)
+    candidates = await _load_candidates(db, user.id)
 
     constraints = ProfileConstraints(
         weekly_budget=float(profile.weekly_budget),

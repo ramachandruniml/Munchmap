@@ -4,10 +4,13 @@ AI-powered, constraint-based meal planning for college students. Given a budget,
 restrictions, dorm equipment, and campus dining menus, Munchmap generates an optimized weekly
 meal plan that minimizes cost and ingredient waste while hitting nutrition targets.
 
-**Current status**: the core loop is implemented end-to-end - sign up, complete onboarding
-(budget/diet/equipment), generate an OR-Tools-optimized weekly meal plan, and get a consolidated
-grocery list. Dining-hall menu parsing, pantry tracking, recipe-discovery embeddings, feedback
-learning, and the observability/dashboard layer are not built yet.
+**Current status**: the core loop and all originally-planned features are implemented - sign up,
+complete onboarding (budget/diet/equipment), generate an OR-Tools-optimized weekly meal plan, get
+a consolidated grocery list (pantry-aware), track pantry items, semantically search recipes,
+paste-and-parse dining-hall menus via Claude, rate recipes to personalize future plans, and
+Prometheus/Grafana observability. The Redpanda queue is still scaffolded but unused, and the Arq
+worker's two jobs remain placeholders (no automatic dining-menu scraper - menus are added via the
+manual paste endpoint instead).
 
 ## Architecture
 
@@ -17,12 +20,12 @@ learning, and the observability/dashboard layer are not built yet.
 | Backend API | FastAPI (async) |
 | Auth | Supabase Auth (backend verifies JWTs via Supabase's JWKS endpoint) |
 | Optimization engine | Google OR-Tools CP-SAT |
-| Database | PostgreSQL (hosted by Supabase) + pgvector (for future embeddings) |
-| ML (planned) | sentence-transformers (recipe/ingredient embeddings), Claude API (menu parsing) |
+| Database | PostgreSQL (hosted by Supabase) + pgvector (recipe embeddings) |
+| ML | sentence-transformers (recipe-discovery embeddings), Claude API (`claude-opus-4-8`, dining-menu parsing) |
 | Queue (scaffolded, unused so far) | Redpanda (Kafka-compatible) |
 | Cache | Redis |
 | Workers | Arq |
-| Observability (planned) | Prometheus + Grafana |
+| Observability | Prometheus (`/metrics`) + Grafana (provisioned dashboard in `observability/`) |
 | CI/CD | GitHub Actions |
 
 ## Getting started

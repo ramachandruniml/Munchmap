@@ -22,6 +22,19 @@ export default function PlanPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<Record<number, boolean>>({});
+
+  async function handleRate(recipeId: number, liked: boolean) {
+    try {
+      await apiFetch(`/recipes/${recipeId}/rating`, {
+        method: "POST",
+        body: JSON.stringify({ liked }),
+      });
+      setRatings((prev) => ({ ...prev, [recipeId]: liked }));
+    } catch {
+      // Rating is a soft signal - fail silently rather than interrupting the plan view.
+    }
+  }
 
   useEffect(() => {
     apiFetch<MealPlan[]>("/meal-plans")
@@ -61,6 +74,12 @@ export default function PlanPage() {
         <div className="flex items-center gap-3">
           <Link href="/pantry" className="text-sm underline">
             Pantry
+          </Link>
+          <Link href="/recipes" className="text-sm underline">
+            Discover recipes
+          </Link>
+          <Link href="/dining" className="text-sm underline">
+            Dining menus
           </Link>
           <Button onClick={handleGenerate} disabled={generating}>
             {generating ? "Generating..." : "Generate this week's plan"}
@@ -109,6 +128,26 @@ export default function PlanPage() {
                         <div className="text-muted-foreground">
                           {entry ? `${entry.recipe_name} - $${entry.cost.toFixed(2)}` : "-"}
                         </div>
+                        {entry && (
+                          <div className="mt-1 flex gap-1">
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant={ratings[entry.recipe_id] === true ? "default" : "outline"}
+                              onClick={() => handleRate(entry.recipe_id, true)}
+                            >
+                              Like
+                            </Button>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant={ratings[entry.recipe_id] === false ? "default" : "outline"}
+                              onClick={() => handleRate(entry.recipe_id, false)}
+                            >
+                              Skip
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

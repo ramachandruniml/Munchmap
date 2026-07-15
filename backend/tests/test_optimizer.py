@@ -7,7 +7,9 @@ from app.services.optimizer import (
 )
 
 
-def make_recipe(id_, cost, calories, equipment=None, diet_tags=None, ingredients=None) -> RecipeCandidate:
+def make_recipe(
+    id_, cost, calories, equipment=None, diet_tags=None, ingredients=None, preference_score=0.0
+) -> RecipeCandidate:
     return RecipeCandidate(
         id=id_,
         cost_per_serving=cost,
@@ -18,6 +20,7 @@ def make_recipe(id_, cost, calories, equipment=None, diet_tags=None, ingredients
         equipment_required=equipment or [],
         diet_tags=diet_tags or [],
         ingredients=ingredients or [(id_, f"ingredient-{id_}")],
+        preference_score=preference_score,
     )
 
 
@@ -79,3 +82,18 @@ def test_solve_weekly_plan_minimizes_distinct_ingredients() -> None:
 
     used_recipe_ids = {a.recipe_id for a in assignments}
     assert used_recipe_ids.issubset({1, 2})
+
+
+def test_solve_weekly_plan_favors_higher_preference_score() -> None:
+    # Same cost and shared ingredient (so cost/overlap terms are tied) - only
+    # preference_score should distinguish them.
+    recipes = [
+        make_recipe(1, cost=2.0, calories=600, ingredients=[(100, "rice")], preference_score=0.0),
+        make_recipe(2, cost=2.0, calories=600, ingredients=[(100, "rice")], preference_score=1.0),
+    ]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    assignments = solve_weekly_plan(recipes, profile, max_recipe_repeats=21)
+
+    recipe_2_count = sum(1 for a in assignments if a.recipe_id == 2)
+    assert recipe_2_count == len(assignments)

@@ -52,5 +52,30 @@ export interface PantryItem {
   unit: string;
 }
 
+export interface RecipeSearchResult {
+  id: number;
+  name: string;
+  cost_per_serving: number;
+  calories: number;
+  protein_g: number;
+  carb_g: number;
+  fat_g: number;
+  diet_tags: string[];
+}
+
+export interface MenuItem {
+  id: number;
+  name: string;
+  station: string;
+  diet_tags: string[];
+}
+
+export interface Menu {
+  id: number;
+  dining_hall_name: string;
+  menu_date: string;
+  items: MenuItem[];
+}
+
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
