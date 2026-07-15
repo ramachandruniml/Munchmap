@@ -1,6 +1,7 @@
 from app.models.base import Base
 from app.models.grocery_list import GroceryList, GroceryListItem
 from app.models.meal_plan import MealPlan, MealPlanEntry
+from app.models.pantry import PantryItem
 from app.models.profile import Profile
 from app.models.recipe import Ingredient, Recipe, RecipeIngredient
 
@@ -14,4 +15,5 @@ __all__ = [
     "MealPlanEntry",
     "GroceryList",
     "GroceryListItem",
+    "PantryItem",
 ]

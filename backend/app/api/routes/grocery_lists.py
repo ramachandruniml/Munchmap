@@ -6,7 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import CurrentUser, get_current_user
 from app.db.session import get_db
-from app.models import GroceryList, GroceryListItem, Ingredient, MealPlan, MealPlanEntry, RecipeIngredient
+from app.models import (
+    GroceryList,
+    GroceryListItem,
+    Ingredient,
+    MealPlan,
+    MealPlanEntry,
+    PantryItem,
+    RecipeIngredient,
+)
 from app.schemas.grocery_list import GroceryListItemOut, GroceryListOut, ToggleItemRequest
 from app.services.grocery import RecipeIngredientLine, build_grocery_list
 
@@ -88,7 +96,15 @@ async def generate_grocery_list(
         )
         for ri, unit_cost in result.all()
     ]
-    grocery_lines = build_grocery_list([lines])
+
+    pantry_result = await db.execute(
+        select(PantryItem).where(PantryItem.profile_id == user.id)
+    )
+    pantry_quantities = {
+        (item.ingredient_id, item.unit): float(item.quantity) for item in pantry_result.scalars()
+    }
+
+    grocery_lines = build_grocery_list([lines], pantry_quantities)
 
     grocery_list = GroceryList(meal_plan_id=meal_plan_id)
     grocery_list.items = [

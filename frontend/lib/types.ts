@@ -44,5 +44,13 @@ export interface GroceryList {
   total_cost: number;
 }
 
+export interface PantryItem {
+  id: number;
+  ingredient_id: number;
+  ingredient_name: string;
+  quantity: number;
+  unit: string;
+}
+
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
