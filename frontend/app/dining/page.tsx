@@ -77,7 +77,7 @@ export default function DiningPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Dining hall menus</h1>
+      <h1 className="font-heading text-2xl font-bold">Dining hall menus</h1>
 
       <Card>
         <CardHeader>

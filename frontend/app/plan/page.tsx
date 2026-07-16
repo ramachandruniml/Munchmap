@@ -70,7 +70,7 @@ export default function PlanPage() {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Your meal plan</h1>
+        <h1 className="font-heading text-2xl font-bold">Your meal plan</h1>
         <div className="flex items-center gap-3">
           <Link href="/pantry" className="text-sm underline">
             Pantry

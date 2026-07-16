@@ -35,7 +35,7 @@ export default function RecipesPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Discover recipes</h1>
+      <h1 className="font-heading text-2xl font-bold">Discover recipes</h1>
       <p className="text-sm text-muted-foreground">
         Describe what you&apos;re craving and find matching recipes from the catalog.
       </p>

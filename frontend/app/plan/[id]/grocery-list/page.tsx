@@ -43,7 +43,7 @@ export default function GroceryListPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Grocery list</h1>
+      <h1 className="font-heading text-2xl font-bold">Grocery list</h1>
 
       {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}

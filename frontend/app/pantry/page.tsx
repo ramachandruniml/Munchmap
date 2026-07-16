@@ -78,7 +78,7 @@ export default function PantryPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">Pantry</h1>
+      <h1 className="font-heading text-2xl font-bold">Pantry</h1>
       <p className="text-sm text-muted-foreground">
         Items you already have get subtracted from future grocery lists.
       </p>
