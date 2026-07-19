@@ -14,9 +14,10 @@ export interface Profile {
 export interface MealPlanEntry {
   day_of_week: number;
   meal_slot: "breakfast" | "lunch" | "dinner";
-  recipe_id: number;
-  recipe_name: string;
+  recipe_id: number | null;
+  recipe_name: string | null;
   cost: number;
+  is_dining_hall: boolean;
 }
 
 export interface MealPlan {

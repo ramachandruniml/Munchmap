@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import ForeignKey, Numeric, String, func
+from sqlalchemy import Boolean, ForeignKey, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,8 +35,9 @@ class MealPlanEntry(Base):
     )
     day_of_week: Mapped[int] = mapped_column()
     meal_slot: Mapped[str] = mapped_column(String)
-    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"))
+    recipe_id: Mapped[int | None] = mapped_column(ForeignKey("recipes.id"), nullable=True)
     cost: Mapped[float] = mapped_column(Numeric(8, 2))
+    is_dining_hall: Mapped[bool] = mapped_column(Boolean, default=False)
 
     meal_plan: Mapped["MealPlan"] = relationship(back_populates="entries")
     recipe: Mapped["Recipe"] = relationship()

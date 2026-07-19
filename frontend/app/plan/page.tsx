@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import { DAY_LABELS, MEAL_SLOTS, type MealPlan } from "@/lib/types";
 
@@ -23,6 +25,8 @@ export default function PlanPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Record<number, boolean>>({});
+  const [diningHallMeals, setDiningHallMeals] = useState("0");
+  const [cookTimeMinutes, setCookTimeMinutes] = useState("");
 
   async function handleRate(recipeId: number, liked: boolean) {
     try {
@@ -54,7 +58,11 @@ export default function PlanPage() {
     try {
       await apiFetch<MealPlan>("/meal-plans", {
         method: "POST",
-        body: JSON.stringify({ week_start_date: nextMonday() }),
+        body: JSON.stringify({
+          week_start_date: nextMonday(),
+          dining_hall_meals: Number(diningHallMeals) || 0,
+          weekly_cook_time_minutes: cookTimeMinutes ? Number(cookTimeMinutes) : null,
+        }),
       });
       const data = await apiFetch<MealPlan[]>("/meal-plans");
       setPlans(data);
@@ -69,7 +77,7 @@ export default function PlanPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-2xl font-bold">Your meal plan</h1>
         <div className="flex items-center gap-3">
           <Link href="/pantry" className="text-sm underline">
@@ -81,10 +89,37 @@ export default function PlanPage() {
           <Link href="/dining" className="text-sm underline">
             Dining menus
           </Link>
-          <Button onClick={handleGenerate} disabled={generating}>
-            {generating ? "Generating..." : "Generate this week's plan"}
-          </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="dining-hall-meals">Dining hall meals this week</Label>
+          <Input
+            id="dining-hall-meals"
+            type="number"
+            min="0"
+            max="21"
+            className="w-28"
+            value={diningHallMeals}
+            onChange={(event) => setDiningHallMeals(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="cook-time-minutes">Cook time budget (min, optional)</Label>
+          <Input
+            id="cook-time-minutes"
+            type="number"
+            min="0"
+            className="w-36"
+            placeholder="No limit"
+            value={cookTimeMinutes}
+            onChange={(event) => setCookTimeMinutes(event.target.value)}
+          />
+        </div>
+        <Button onClick={handleGenerate} disabled={generating}>
+          {generating ? "Generating..." : "Generate this week's plan"}
+        </Button>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -126,15 +161,19 @@ export default function PlanPage() {
                       <div key={slot} className="text-xs">
                         <div className="font-medium capitalize">{slot}</div>
                         <div className="text-muted-foreground">
-                          {entry ? `${entry.recipe_name} - $${entry.cost.toFixed(2)}` : "-"}
+                          {entry?.is_dining_hall
+                            ? "Dining hall"
+                            : entry
+                              ? `${entry.recipe_name} - $${entry.cost.toFixed(2)}`
+                              : "-"}
                         </div>
-                        {entry && (
+                        {entry && !entry.is_dining_hall && entry.recipe_id !== null && (
                           <div className="mt-1 flex gap-1">
                             <Button
                               type="button"
                               size="xs"
                               variant={ratings[entry.recipe_id] === true ? "default" : "outline"}
-                              onClick={() => handleRate(entry.recipe_id, true)}
+                              onClick={() => handleRate(entry.recipe_id!, true)}
                             >
                               Like
                             </Button>
@@ -142,7 +181,7 @@ export default function PlanPage() {
                               type="button"
                               size="xs"
                               variant={ratings[entry.recipe_id] === false ? "default" : "outline"}
-                              onClick={() => handleRate(entry.recipe_id, false)}
+                              onClick={() => handleRate(entry.recipe_id!, false)}
                             >
                               Skip
                             </Button>

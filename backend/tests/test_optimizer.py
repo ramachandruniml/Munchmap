@@ -8,7 +8,15 @@ from app.services.optimizer import (
 
 
 def make_recipe(
-    id_, cost, calories, equipment=None, diet_tags=None, ingredients=None, preference_score=0.0
+    id_,
+    cost,
+    calories,
+    equipment=None,
+    diet_tags=None,
+    ingredients=None,
+    preference_score=0.0,
+    pantry_score=0.0,
+    cook_time_minutes=0,
 ) -> RecipeCandidate:
     return RecipeCandidate(
         id=id_,
@@ -21,6 +29,8 @@ def make_recipe(
         diet_tags=diet_tags or [],
         ingredients=ingredients or [(id_, f"ingredient-{id_}")],
         preference_score=preference_score,
+        pantry_score=pantry_score,
+        cook_time_minutes=cook_time_minutes,
     )
 
 
@@ -94,6 +104,54 @@ def test_solve_weekly_plan_favors_higher_preference_score() -> None:
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
     assignments = solve_weekly_plan(recipes, profile, max_recipe_repeats=21)
+
+    recipe_2_count = sum(1 for a in assignments if a.recipe_id == 2)
+    assert recipe_2_count == len(assignments)
+
+
+def test_solve_weekly_plan_respects_dining_hall_meals_count() -> None:
+    recipes = [make_recipe(i, cost=2.0, calories=600) for i in range(1, 8)]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    assignments = solve_weekly_plan(recipes, profile, dining_hall_meals=5)
+
+    dining_hall_assignments = [a for a in assignments if a.is_dining_hall]
+    cooked_assignments = [a for a in assignments if not a.is_dining_hall]
+    assert len(dining_hall_assignments) == 5
+    assert all(a.recipe_id is None and a.cost == 0.0 for a in dining_hall_assignments)
+    assert len(cooked_assignments) == 21 - 5
+    assert all(a.recipe_id is not None for a in cooked_assignments)
+
+
+def test_solve_weekly_plan_raises_when_cook_time_budget_too_tight() -> None:
+    recipes = [make_recipe(1, cost=1.0, calories=600, cook_time_minutes=60)]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    try:
+        solve_weekly_plan(
+            recipes,
+            profile,
+            max_recipe_repeats=21,
+            dining_hall_meals=10,
+            weekly_cook_time_minutes=300,
+        )
+        assert False, "expected ValueError for infeasible cook-time budget"
+    except ValueError:
+        pass
+
+
+def test_solve_weekly_plan_favors_recipe_using_pantry_ingredients() -> None:
+    # Same cost, different (non-shared) ingredients - only pantry ownership of
+    # ingredient 200 should distinguish them.
+    recipes = [
+        make_recipe(1, cost=2.0, calories=600, ingredients=[(100, "flour")], pantry_score=0.0),
+        make_recipe(2, cost=2.0, calories=600, ingredients=[(200, "rice")], pantry_score=1.0),
+    ]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    assignments = solve_weekly_plan(
+        recipes, profile, max_recipe_repeats=21, pantry_ingredient_ids=frozenset({200})
+    )
 
     recipe_2_count = sum(1 for a in assignments if a.recipe_id == 2)
     assert recipe_2_count == len(assignments)

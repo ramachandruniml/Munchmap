@@ -7,7 +7,15 @@ from sqlalchemy.orm import selectinload
 
 from app.core.security import CurrentUser, get_current_user
 from app.db.session import get_db
-from app.models import MealPlan, MealPlanEntry, Profile, Recipe, RecipeIngredient, RecipeRating
+from app.models import (
+    MealPlan,
+    MealPlanEntry,
+    PantryItem,
+    Profile,
+    Recipe,
+    RecipeIngredient,
+    RecipeRating,
+)
 from app.schemas.meal_plan import MealPlanEntryOut, MealPlanGenerateRequest, MealPlanOut
 from app.services.optimizer import ProfileConstraints, RecipeCandidate, solve_weekly_plan
 from app.services.personalization import build_preference_vector, cosine_similarity
@@ -24,7 +32,9 @@ async def _load_profile(db: AsyncSession, user_id: uuid.UUID) -> Profile:
     return profile
 
 
-async def _load_candidates(db: AsyncSession, user_id: uuid.UUID) -> list[RecipeCandidate]:
+async def _load_candidates(
+    db: AsyncSession, user_id: uuid.UUID
+) -> tuple[list[RecipeCandidate], frozenset[int]]:
     result = await db.execute(
         select(Recipe).options(
             selectinload(Recipe.ingredients).selectinload(RecipeIngredient.ingredient)
@@ -49,7 +59,12 @@ async def _load_candidates(db: AsyncSession, user_id: uuid.UUID) -> list[RecipeC
     ]
     preference_vector = build_preference_vector(liked_embeddings, disliked_embeddings)
 
-    return [
+    pantry_result = await db.execute(
+        select(PantryItem.ingredient_id).where(PantryItem.profile_id == user_id)
+    )
+    pantry_ingredient_ids = frozenset(pantry_result.scalars())
+
+    candidates = [
         RecipeCandidate(
             id=r.id,
             cost_per_serving=float(r.cost_per_serving),
@@ -60,14 +75,22 @@ async def _load_candidates(db: AsyncSession, user_id: uuid.UUID) -> list[RecipeC
             equipment_required=r.equipment_required,
             diet_tags=r.diet_tags,
             ingredients=[(ri.ingredient_id, ri.ingredient.name) for ri in r.ingredients],
+            cook_time_minutes=r.cook_time_minutes,
             preference_score=(
                 cosine_similarity(r.embedding, preference_vector)
                 if r.embedding is not None and preference_vector is not None
                 else 0.0
             ),
+            pantry_score=(
+                sum(1 for ri in r.ingredients if ri.ingredient_id in pantry_ingredient_ids)
+                / len(r.ingredients)
+                if r.ingredients
+                else 0.0
+            ),
         )
         for r in recipes
     ]
+    return candidates, pantry_ingredient_ids
 
 
 async def _get_owned_meal_plan(
@@ -82,7 +105,7 @@ async def _get_owned_meal_plan(
 async def _serialize_meal_plan(db: AsyncSession, meal_plan: MealPlan) -> MealPlanOut:
     result = await db.execute(
         select(MealPlanEntry, Recipe.name)
-        .join(Recipe, Recipe.id == MealPlanEntry.recipe_id)
+        .outerjoin(Recipe, Recipe.id == MealPlanEntry.recipe_id)
         .where(MealPlanEntry.meal_plan_id == meal_plan.id)
         .order_by(MealPlanEntry.day_of_week, MealPlanEntry.meal_slot)
     )
@@ -93,6 +116,7 @@ async def _serialize_meal_plan(db: AsyncSession, meal_plan: MealPlan) -> MealPla
             recipe_id=entry.recipe_id,
             recipe_name=name,
             cost=float(entry.cost),
+            is_dining_hall=entry.is_dining_hall,
         )
         for entry, name in result.all()
     ]
@@ -112,7 +136,7 @@ async def generate_meal_plan(
     db: AsyncSession = Depends(get_db),
 ) -> MealPlanOut:
     profile = await _load_profile(db, user.id)
-    candidates = await _load_candidates(db, user.id)
+    candidates, pantry_ingredient_ids = await _load_candidates(db, user.id)
 
     constraints = ProfileConstraints(
         weekly_budget=float(profile.weekly_budget),
@@ -128,7 +152,12 @@ async def generate_meal_plan(
 
     try:
         assignments = solve_weekly_plan(
-            candidates, constraints, max_recipe_repeats=payload.max_recipe_repeats
+            candidates,
+            constraints,
+            max_recipe_repeats=payload.max_recipe_repeats,
+            pantry_ingredient_ids=pantry_ingredient_ids,
+            dining_hall_meals=payload.dining_hall_meals,
+            weekly_cook_time_minutes=payload.weekly_cook_time_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -145,6 +174,7 @@ async def generate_meal_plan(
             meal_slot=a.meal_slot,
             recipe_id=a.recipe_id,
             cost=a.cost,
+            is_dining_hall=a.is_dining_hall,
         )
         for a in assignments
     ]
