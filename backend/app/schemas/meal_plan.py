@@ -11,6 +11,7 @@ class MealPlanGenerateRequest(BaseModel):
 
 
 class MealPlanEntryOut(BaseModel):
+    id: int
     day_of_week: int
     meal_slot: str
     recipe_id: int | None
@@ -24,4 +25,10 @@ class MealPlanOut(BaseModel):
     week_start_date: date
     total_cost: float
     status: str
+    dining_hall_meals: int
+    weekly_cook_time_minutes: int | None
     entries: list[MealPlanEntryOut]
+
+
+class SwapMealRequest(BaseModel):
+    recipe_id: int | None = None

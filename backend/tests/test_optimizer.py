@@ -155,3 +155,41 @@ def test_solve_weekly_plan_favors_recipe_using_pantry_ingredients() -> None:
 
     recipe_2_count = sum(1 for a in assignments if a.recipe_id == 2)
     assert recipe_2_count == len(assignments)
+
+
+def test_solve_weekly_plan_locks_slot_to_requested_recipe() -> None:
+    recipes = [make_recipe(i, cost=2.0, calories=600) for i in range(1, 8)]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    assignments = solve_weekly_plan(
+        recipes, profile, locked_recipe_by_slot={(0, "breakfast"): 3}
+    )
+
+    locked = next(a for a in assignments if a.day_of_week == 0 and a.meal_slot == "breakfast")
+    assert locked.recipe_id == 3
+
+
+def test_solve_weekly_plan_excludes_recipe_from_slot() -> None:
+    # Recipe 2 is strongly preferred everywhere - except the excluded slot, which
+    # must fall back to recipe 1.
+    recipes = [
+        make_recipe(1, cost=2.0, calories=600, ingredients=[(100, "rice")], preference_score=0.0),
+        make_recipe(2, cost=2.0, calories=600, ingredients=[(100, "rice")], preference_score=1.0),
+    ]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    assignments = solve_weekly_plan(
+        recipes,
+        profile,
+        max_recipe_repeats=21,
+        excluded_recipe_by_slot={(0, "breakfast"): 2},
+    )
+
+    excluded_slot = next(
+        a for a in assignments if a.day_of_week == 0 and a.meal_slot == "breakfast"
+    )
+    assert excluded_slot.recipe_id == 1
+    other_slots = [
+        a for a in assignments if not (a.day_of_week == 0 and a.meal_slot == "breakfast")
+    ]
+    assert all(a.recipe_id == 2 for a in other_slots)

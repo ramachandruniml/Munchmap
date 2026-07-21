@@ -27,6 +27,7 @@ export default function PlanPage() {
   const [ratings, setRatings] = useState<Record<number, boolean>>({});
   const [diningHallMeals, setDiningHallMeals] = useState("0");
   const [cookTimeMinutes, setCookTimeMinutes] = useState("");
+  const [swappingEntryId, setSwappingEntryId] = useState<number | null>(null);
 
   async function handleRate(recipeId: number, liked: boolean) {
     try {
@@ -37,6 +38,22 @@ export default function PlanPage() {
       setRatings((prev) => ({ ...prev, [recipeId]: liked }));
     } catch {
       // Rating is a soft signal - fail silently rather than interrupting the plan view.
+    }
+  }
+
+  async function handleSwap(mealPlanId: number, entryId: number) {
+    setSwappingEntryId(entryId);
+    setError(null);
+    try {
+      const updated = await apiFetch<MealPlan>(
+        `/meal-plans/${mealPlanId}/entries/${entryId}/swap`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to swap meal");
+    } finally {
+      setSwappingEntryId(null);
     }
   }
 
@@ -184,6 +201,15 @@ export default function PlanPage() {
                               onClick={() => handleRate(entry.recipe_id!, false)}
                             >
                               Skip
+                            </Button>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={swappingEntryId === entry.id}
+                              onClick={() => handleSwap(currentPlan.id, entry.id)}
+                            >
+                              {swappingEntryId === entry.id ? "..." : "Swap"}
                             </Button>
                           </div>
                         )}

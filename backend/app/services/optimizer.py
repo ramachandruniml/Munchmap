@@ -79,6 +79,8 @@ def solve_weekly_plan(
     pantry_ingredient_ids: frozenset[int] = frozenset(),
     dining_hall_meals: int = 0,
     weekly_cook_time_minutes: int | None = None,
+    locked_recipe_by_slot: dict[tuple[int, str], int | None] | None = None,
+    excluded_recipe_by_slot: dict[tuple[int, str], int] | None = None,
     nutrition_tolerance: float = 0.15,
     time_limit_seconds: float = 10.0,
 ) -> list[MealAssignment]:
@@ -105,6 +107,18 @@ def solve_weekly_plan(
             model.AddExactlyOne(slot_vars)
 
     model.Add(sum(dining_hall_vars.values()) == dining_hall_meals)
+
+    for (day, slot), recipe_id in (locked_recipe_by_slot or {}).items():
+        if recipe_id is None:
+            model.Add(dining_hall_vars[day, slot] == 1)
+        elif (day, slot, recipe_id) in x:
+            model.Add(x[day, slot, recipe_id] == 1)
+        else:
+            raise ValueError(f"Recipe {recipe_id} is not a valid choice for this profile")
+
+    for (day, slot), recipe_id in (excluded_recipe_by_slot or {}).items():
+        if (day, slot, recipe_id) in x:
+            model.Add(x[day, slot, recipe_id] == 0)
 
     for recipe in candidates:
         uses = [x[day, slot, recipe.id] for day in DAYS for slot in MEAL_SLOTS]

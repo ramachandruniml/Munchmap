@@ -12,6 +12,7 @@ export interface Profile {
 }
 
 export interface MealPlanEntry {
+  id: number;
   day_of_week: number;
   meal_slot: "breakfast" | "lunch" | "dinner";
   recipe_id: number | null;
@@ -25,6 +26,8 @@ export interface MealPlan {
   week_start_date: string;
   total_cost: number;
   status: string;
+  dining_hall_meals: number;
+  weekly_cook_time_minutes: number | null;
   entries: MealPlanEntry[];
 }
 
@@ -51,6 +54,15 @@ export interface PantryItem {
   ingredient_name: string;
   quantity: number;
   unit: string;
+  expires_at: string | null;
+}
+
+export interface ExpiringRecipe {
+  recipe_id: number;
+  recipe_name: string;
+  cost_per_serving: number;
+  expiring_ingredients: string[];
+  soonest_expiration: string;
 }
 
 export interface RecipeSearchResult {
@@ -76,6 +88,18 @@ export interface Menu {
   dining_hall_name: string;
   menu_date: string;
   items: MenuItem[];
+}
+
+export interface Substitute {
+  id: number;
+  name: string;
+  similarity: number;
+}
+
+export interface IngredientSubstitutes {
+  ingredient_id: number;
+  ingredient_name: string;
+  substitutes: Substitute[];
 }
 
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];

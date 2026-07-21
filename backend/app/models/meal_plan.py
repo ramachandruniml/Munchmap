@@ -19,6 +19,9 @@ class MealPlan(Base):
     week_start_date: Mapped[date] = mapped_column()
     total_cost: Mapped[float] = mapped_column(Numeric(8, 2))
     status: Mapped[str] = mapped_column(String, default="active")
+    dining_hall_meals: Mapped[int] = mapped_column(default=0)
+    weekly_cook_time_minutes: Mapped[int | None] = mapped_column(nullable=True)
+    max_recipe_repeats: Mapped[int] = mapped_column(default=3)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     entries: Mapped[list["MealPlanEntry"]] = relationship(

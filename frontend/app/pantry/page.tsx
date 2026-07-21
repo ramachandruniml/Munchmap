@@ -1,21 +1,30 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
-import type { PantryItem } from "@/lib/types";
+import type { ExpiringRecipe, PantryItem } from "@/lib/types";
+
+function isExpiringSoon(expiresAt: string | null): boolean {
+  if (!expiresAt) return false;
+  const daysUntil = (new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+  return daysUntil <= 5;
+}
 
 export default function PantryPage() {
   const [items, setItems] = useState<PantryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expiringRecipes, setExpiringRecipes] = useState<ExpiringRecipe[]>([]);
 
   const [ingredientName, setIngredientName] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("each");
+  const [expiresAt, setExpiresAt] = useState("");
   const [saving, setSaving] = useState(false);
 
   function loadItems() {
@@ -27,8 +36,16 @@ export default function PantryPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load pantry"));
   }
 
+  function loadExpiringRecipes() {
+    return apiFetch<ExpiringRecipe[]>("/pantry/expiring-soon-recipes")
+      .then(setExpiringRecipes)
+      .catch(() => {
+        // Non-critical - the pantry list itself already loaded successfully.
+      });
+  }
+
   useEffect(() => {
-    loadItems().finally(() => setLoading(false));
+    Promise.all([loadItems(), loadExpiringRecipes()]).finally(() => setLoading(false));
   }, []);
 
   async function handleAdd(event: FormEvent) {
@@ -42,11 +59,13 @@ export default function PantryPage() {
           ingredient_name: ingredientName,
           quantity: Number(quantity),
           unit,
+          expires_at: expiresAt || null,
         }),
       });
       setIngredientName("");
       setQuantity("1");
-      await loadItems();
+      setExpiresAt("");
+      await Promise.all([loadItems(), loadExpiringRecipes()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add item");
     } finally {
@@ -59,9 +78,21 @@ export default function PantryPage() {
     try {
       await apiFetch(`/pantry/${item.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ quantity: nextQuantity }),
+        body: JSON.stringify({ quantity: nextQuantity, expires_at: item.expires_at }),
       });
       await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update item");
+    }
+  }
+
+  async function handleUpdateExpiration(item: PantryItem, nextExpiresAt: string) {
+    try {
+      await apiFetch(`/pantry/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ quantity: item.quantity, expires_at: nextExpiresAt || null }),
+      });
+      await Promise.all([loadItems(), loadExpiringRecipes()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update item");
     }
@@ -123,12 +154,52 @@ export default function PantryPage() {
                 onChange={(event) => setUnit(event.target.value)}
               />
             </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="expires-at">Expires (optional)</Label>
+              <Input
+                id="expires-at"
+                type="date"
+                className="w-40"
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
+              />
+            </div>
             <Button type="submit" disabled={saving}>
               {saving ? "Adding..." : "Add"}
             </Button>
           </form>
         </CardContent>
       </Card>
+
+      {expiringRecipes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Use it up soon</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <p className="text-sm text-muted-foreground">
+              Recipes that use pantry ingredients expiring within 5 days.
+            </p>
+            {expiringRecipes.map((recipe) => (
+              <div key={recipe.recipe_id} className="flex flex-col gap-1 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{recipe.recipe_name}</span>
+                  <span className="text-sm text-muted-foreground">
+                    ${recipe.cost_per_serving.toFixed(2)}/serving
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {recipe.expiring_ingredients.map((name) => (
+                    <Badge key={name} variant="secondary">
+                      {name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
@@ -144,9 +215,14 @@ export default function PantryPage() {
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between gap-3 rounded-md border p-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
             >
-              <span className="font-medium capitalize">{item.ingredient_name}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium capitalize">{item.ingredient_name}</span>
+                {isExpiringSoon(item.expires_at) && (
+                  <Badge variant="destructive">Expires soon</Badge>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -167,6 +243,12 @@ export default function PantryPage() {
                 >
                   +
                 </Button>
+                <Input
+                  type="date"
+                  className="w-40"
+                  value={item.expires_at ?? ""}
+                  onChange={(event) => handleUpdateExpiration(item, event.target.value)}
+                />
                 <Button
                   type="button"
                   variant="ghost"

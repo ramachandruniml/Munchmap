@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,8 +16,18 @@ from app.models import (
     RecipeIngredient,
     RecipeRating,
 )
-from app.schemas.meal_plan import MealPlanEntryOut, MealPlanGenerateRequest, MealPlanOut
-from app.services.optimizer import ProfileConstraints, RecipeCandidate, solve_weekly_plan
+from app.schemas.meal_plan import (
+    MealPlanEntryOut,
+    MealPlanGenerateRequest,
+    MealPlanOut,
+    SwapMealRequest,
+)
+from app.services.optimizer import (
+    MealAssignment,
+    ProfileConstraints,
+    RecipeCandidate,
+    solve_weekly_plan,
+)
 from app.services.personalization import build_preference_vector, cosine_similarity
 
 router = APIRouter(prefix="/meal-plans", tags=["meal-plans"])
@@ -93,6 +103,36 @@ async def _load_candidates(
     return candidates, pantry_ingredient_ids
 
 
+def _constraints_from_profile(profile: Profile) -> ProfileConstraints:
+    return ProfileConstraints(
+        weekly_budget=float(profile.weekly_budget),
+        equipment=profile.equipment,
+        dietary_restrictions=profile.dietary_restrictions,
+        allergies=profile.allergies,
+        dislikes=profile.dislikes,
+        calorie_target=profile.calorie_target,
+        protein_target_g=profile.protein_target_g,
+        carb_target_g=profile.carb_target_g,
+        fat_target_g=profile.fat_target_g,
+    )
+
+
+def _entries_from_assignments(
+    assignments: list[MealAssignment], meal_plan_id: int | None = None
+) -> list[MealPlanEntry]:
+    return [
+        MealPlanEntry(
+            meal_plan_id=meal_plan_id,
+            day_of_week=a.day_of_week,
+            meal_slot=a.meal_slot,
+            recipe_id=a.recipe_id,
+            cost=a.cost,
+            is_dining_hall=a.is_dining_hall,
+        )
+        for a in assignments
+    ]
+
+
 async def _get_owned_meal_plan(
     db: AsyncSession, meal_plan_id: int, user_id: uuid.UUID
 ) -> MealPlan:
@@ -111,6 +151,7 @@ async def _serialize_meal_plan(db: AsyncSession, meal_plan: MealPlan) -> MealPla
     )
     entries = [
         MealPlanEntryOut(
+            id=entry.id,
             day_of_week=entry.day_of_week,
             meal_slot=entry.meal_slot,
             recipe_id=entry.recipe_id,
@@ -125,6 +166,8 @@ async def _serialize_meal_plan(db: AsyncSession, meal_plan: MealPlan) -> MealPla
         week_start_date=meal_plan.week_start_date,
         total_cost=float(meal_plan.total_cost),
         status=meal_plan.status,
+        dining_hall_meals=meal_plan.dining_hall_meals,
+        weekly_cook_time_minutes=meal_plan.weekly_cook_time_minutes,
         entries=entries,
     )
 
@@ -137,18 +180,7 @@ async def generate_meal_plan(
 ) -> MealPlanOut:
     profile = await _load_profile(db, user.id)
     candidates, pantry_ingredient_ids = await _load_candidates(db, user.id)
-
-    constraints = ProfileConstraints(
-        weekly_budget=float(profile.weekly_budget),
-        equipment=profile.equipment,
-        dietary_restrictions=profile.dietary_restrictions,
-        allergies=profile.allergies,
-        dislikes=profile.dislikes,
-        calorie_target=profile.calorie_target,
-        protein_target_g=profile.protein_target_g,
-        carb_target_g=profile.carb_target_g,
-        fat_target_g=profile.fat_target_g,
-    )
+    constraints = _constraints_from_profile(profile)
 
     try:
         assignments = solve_weekly_plan(
@@ -167,18 +199,62 @@ async def generate_meal_plan(
         week_start_date=payload.week_start_date,
         total_cost=sum(a.cost for a in assignments),
         status="active",
+        dining_hall_meals=payload.dining_hall_meals,
+        weekly_cook_time_minutes=payload.weekly_cook_time_minutes,
+        max_recipe_repeats=payload.max_recipe_repeats,
     )
-    meal_plan.entries = [
-        MealPlanEntry(
-            day_of_week=a.day_of_week,
-            meal_slot=a.meal_slot,
-            recipe_id=a.recipe_id,
-            cost=a.cost,
-            is_dining_hall=a.is_dining_hall,
-        )
-        for a in assignments
-    ]
+    meal_plan.entries = _entries_from_assignments(assignments)
     db.add(meal_plan)
+    await db.commit()
+    await db.refresh(meal_plan)
+    return await _serialize_meal_plan(db, meal_plan)
+
+
+@router.post("/{meal_plan_id}/entries/{entry_id}/swap", response_model=MealPlanOut)
+async def swap_meal(
+    meal_plan_id: int,
+    entry_id: int,
+    payload: SwapMealRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MealPlanOut:
+    meal_plan = await _get_owned_meal_plan(db, meal_plan_id, user.id)
+
+    entry = await db.get(MealPlanEntry, entry_id)
+    if entry is None or entry.meal_plan_id != meal_plan.id:
+        raise HTTPException(status_code=404, detail="Meal plan entry not found")
+    if entry.is_dining_hall:
+        raise HTTPException(status_code=400, detail="Cannot swap a dining-hall meal")
+
+    profile = await _load_profile(db, user.id)
+    candidates, pantry_ingredient_ids = await _load_candidates(db, user.id)
+    constraints = _constraints_from_profile(profile)
+
+    slot = (entry.day_of_week, entry.meal_slot)
+    locked_recipe_by_slot: dict[tuple[int, str], int | None] = {}
+    excluded_recipe_by_slot: dict[tuple[int, str], int] = {}
+    if payload.recipe_id is not None:
+        locked_recipe_by_slot[slot] = payload.recipe_id
+    else:
+        excluded_recipe_by_slot[slot] = entry.recipe_id
+
+    try:
+        assignments = solve_weekly_plan(
+            candidates,
+            constraints,
+            max_recipe_repeats=meal_plan.max_recipe_repeats,
+            pantry_ingredient_ids=pantry_ingredient_ids,
+            dining_hall_meals=meal_plan.dining_hall_meals,
+            weekly_cook_time_minutes=meal_plan.weekly_cook_time_minutes,
+            locked_recipe_by_slot=locked_recipe_by_slot,
+            excluded_recipe_by_slot=excluded_recipe_by_slot,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await db.execute(delete(MealPlanEntry).where(MealPlanEntry.meal_plan_id == meal_plan.id))
+    db.add_all(_entries_from_assignments(assignments, meal_plan_id=meal_plan.id))
+    meal_plan.total_cost = sum(a.cost for a in assignments)
     await db.commit()
     await db.refresh(meal_plan)
     return await _serialize_meal_plan(db, meal_plan)

@@ -12,6 +12,7 @@ class Ingredient(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     unit: Mapped[str] = mapped_column(String)
     unit_cost: Mapped[float] = mapped_column(Numeric(8, 4))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
 
 
 class Recipe(Base):

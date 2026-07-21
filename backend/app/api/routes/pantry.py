@@ -1,11 +1,18 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import CurrentUser, get_current_user
 from app.db.session import get_db
-from app.models import Ingredient, PantryItem
-from app.schemas.pantry import PantryItemIn, PantryItemOut, PantryItemUpdate
+from app.models import Ingredient, PantryItem, Recipe, RecipeIngredient
+from app.schemas.pantry import (
+    ExpiringRecipeOut,
+    PantryItemIn,
+    PantryItemOut,
+    PantryItemUpdate,
+)
 
 router = APIRouter(prefix="/pantry", tags=["pantry"])
 
@@ -35,8 +42,53 @@ async def list_pantry_items(
             ingredient_name=name,
             quantity=float(item.quantity),
             unit=item.unit,
+            expires_at=item.expires_at,
         )
         for item, name in result.all()
+    ]
+
+
+@router.get("/expiring-soon-recipes", response_model=list[ExpiringRecipeOut])
+async def get_expiring_soon_recipes(
+    days: int = 5,
+    limit: int = 10,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ExpiringRecipeOut]:
+    cutoff = date.today() + timedelta(days=days)
+    soonest = func.min(PantryItem.expires_at).label("soonest_expiration")
+    expiring_ingredients = func.array_agg(func.distinct(Ingredient.name)).label(
+        "expiring_ingredients"
+    )
+    result = await db.execute(
+        select(
+            Recipe.id,
+            Recipe.name,
+            Recipe.cost_per_serving,
+            soonest,
+            expiring_ingredients,
+        )
+        .join(RecipeIngredient, RecipeIngredient.recipe_id == Recipe.id)
+        .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+        .join(PantryItem, PantryItem.ingredient_id == Ingredient.id)
+        .where(
+            PantryItem.profile_id == user.id,
+            PantryItem.expires_at.isnot(None),
+            PantryItem.expires_at <= cutoff,
+        )
+        .group_by(Recipe.id)
+        .order_by(soonest)
+        .limit(limit)
+    )
+    return [
+        ExpiringRecipeOut(
+            recipe_id=row.id,
+            recipe_name=row.name,
+            cost_per_serving=float(row.cost_per_serving),
+            expiring_ingredients=row.expiring_ingredients,
+            soonest_expiration=row.soonest_expiration,
+        )
+        for row in result.all()
     ]
 
 
@@ -68,10 +120,13 @@ async def add_pantry_item(
             ingredient_id=ingredient.id,
             quantity=payload.quantity,
             unit=payload.unit,
+            expires_at=payload.expires_at,
         )
         db.add(item)
     else:
         item.quantity = float(item.quantity) + payload.quantity
+        if payload.expires_at is not None:
+            item.expires_at = payload.expires_at
 
     await db.commit()
     await db.refresh(item)
@@ -81,6 +136,7 @@ async def add_pantry_item(
         ingredient_name=ingredient.name,
         quantity=float(item.quantity),
         unit=item.unit,
+        expires_at=item.expires_at,
     )
 
 
@@ -93,6 +149,7 @@ async def update_pantry_item(
 ) -> PantryItemOut:
     item = await _get_owned_item(db, item_id, user.id)
     item.quantity = payload.quantity
+    item.expires_at = payload.expires_at
     await db.commit()
     await db.refresh(item)
 
@@ -103,6 +160,7 @@ async def update_pantry_item(
         ingredient_name=ingredient.name,
         quantity=float(item.quantity),
         unit=item.unit,
+        expires_at=item.expires_at,
     )
 
 

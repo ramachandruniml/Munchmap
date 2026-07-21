@@ -2,7 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from app.api.routes import dining, grocery_lists, health, meal_plans, pantry, profile, recipes
+from app.api.routes import (
+    dining,
+    grocery_lists,
+    health,
+    ingredients,
+    meal_plans,
+    pantry,
+    profile,
+    recipes,
+)
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -26,3 +35,4 @@ app.include_router(grocery_lists.router, prefix="/api")
 app.include_router(pantry.router, prefix="/api")
 app.include_router(recipes.router, prefix="/api")
 app.include_router(dining.router, prefix="/api")
+app.include_router(ingredients.router, prefix="/api")

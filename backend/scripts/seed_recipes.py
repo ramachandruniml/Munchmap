@@ -161,7 +161,10 @@ async def seed() -> None:
                         )
                         if existing is None:
                             existing = Ingredient(
-                                name=name, unit="unit", unit_cost=match_price(name, prices)
+                                name=name,
+                                unit="unit",
+                                unit_cost=match_price(name, prices),
+                                embedding=embed_text(name),
                             )
                             session.add(existing)
                             await session.flush()
