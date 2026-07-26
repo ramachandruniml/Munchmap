@@ -7,7 +7,7 @@ meal plan that minimizes cost and ingredient waste while hitting nutrition targe
 **Current status**: the core loop and all originally-planned features are implemented - sign up,
 complete onboarding (budget/diet/equipment), generate an OR-Tools-optimized weekly meal plan, get
 a consolidated grocery list (pantry-aware), track pantry items, semantically search recipes,
-paste-and-parse dining-hall menus via Claude, rate recipes to personalize future plans, and
+paste-and-parse dining-hall menus via Gemini, rate recipes to personalize future plans, and
 Prometheus/Grafana observability. The Redpanda queue is still scaffolded but unused, and the Arq
 worker's two jobs remain placeholders (no automatic dining-menu scraper - menus are added via the
 manual paste endpoint instead).
@@ -21,7 +21,7 @@ manual paste endpoint instead).
 | Auth | Supabase Auth (backend verifies JWTs via Supabase's JWKS endpoint) |
 | Optimization engine | Google OR-Tools CP-SAT |
 | Database | PostgreSQL (hosted by Supabase) + pgvector (recipe embeddings) |
-| ML | sentence-transformers (recipe-discovery embeddings), Claude API (`claude-opus-4-8`, dining-menu parsing) |
+| ML | sentence-transformers (recipe-discovery embeddings), Gemini API (`gemini-flash-latest`, dining-menu parsing) |
 | Queue (scaffolded, unused so far) | Redpanda (Kafka-compatible) |
 | Cache | Redis |
 | Workers | Arq |

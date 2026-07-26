@@ -1,9 +1,10 @@
-from anthropic import AsyncAnthropic
+from google import genai
+from google.genai import types
 from pydantic import BaseModel
 
 from app.core.config import get_settings
 
-MODEL = "claude-opus-4-8"
+MODEL = "gemini-flash-latest"
 
 
 class ParsedMenuItem(BaseModel):
@@ -28,12 +29,14 @@ def build_prompt(raw_text: str) -> str:
 
 
 async def parse_menu_items(raw_text: str) -> list[ParsedMenuItem]:
-    client = AsyncAnthropic(api_key=get_settings().anthropic_api_key)
-    response = await client.messages.parse(
+    client = genai.Client(api_key=get_settings().gemini_api_key)
+    response = await client.aio.models.generate_content(
         model=MODEL,
-        max_tokens=4096,
-        thinking={"type": "adaptive"},
-        messages=[{"role": "user", "content": build_prompt(raw_text)}],
-        output_format=ParsedMenu,
+        contents=build_prompt(raw_text),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ParsedMenu,
+        ),
     )
-    return response.parsed_output.items
+    parsed: ParsedMenu = response.parsed
+    return parsed.items
