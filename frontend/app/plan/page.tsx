@@ -30,7 +30,6 @@ export default function PlanPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Record<number, boolean>>({});
-  const [diningHallMeals, setDiningHallMeals] = useState("0");
   const [cookTimeMinutes, setCookTimeMinutes] = useState("");
   const [weeklyBudget, setWeeklyBudget] = useState("");
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string[]>([]);
@@ -93,7 +92,7 @@ export default function PlanPage() {
         method: "POST",
         body: JSON.stringify({
           week_start_date: nextMonday(),
-          dining_hall_meals: Number(diningHallMeals) || 0,
+          dining_hall_meals: 0,
           weekly_cook_time_minutes: cookTimeMinutes ? Number(cookTimeMinutes) : null,
           weekly_budget: weeklyBudget ? Number(weeklyBudget) : null,
           dietary_restrictions: dietaryRestrictions,
@@ -133,7 +132,7 @@ export default function PlanPage() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="cook-time-minutes">Cook time budget (min, optional)</Label>
+              <Label htmlFor="cook-time-minutes">Max cook time per meal (min, optional)</Label>
               <Input
                 id="cook-time-minutes"
                 type="number"
@@ -142,18 +141,6 @@ export default function PlanPage() {
                 placeholder="No limit"
                 value={cookTimeMinutes}
                 onChange={(event) => setCookTimeMinutes(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="dining-hall-meals">Dining hall meals this week</Label>
-              <Input
-                id="dining-hall-meals"
-                type="number"
-                min="0"
-                max="28"
-                className="w-28"
-                value={diningHallMeals}
-                onChange={(event) => setDiningHallMeals(event.target.value)}
               />
             </div>
           </div>

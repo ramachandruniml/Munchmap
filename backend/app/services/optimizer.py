@@ -15,6 +15,16 @@ PESCATARIAN_EXCLUDED_INGREDIENTS = {
     "pepperoni", "salami", "chorizo",
 }
 
+# Seeded recipes only ever require concrete appliances (stovetop/oven/microwave/etc.) -
+# none use the "full_kitchen" tag itself, so picking only "full_kitchen" would otherwise
+# match zero recipes. Treat it as shorthand for having every appliance available.
+FULL_KITCHEN_EQUIPMENT = {"stovetop", "oven", "microwave", "hot_plate", "mini_fridge"}
+
+
+class _StopAtFirstSolution(cp_model.CpSolverSolutionCallback):
+    def on_solution_callback(self) -> None:
+        self.StopSearch()
+
 
 @dataclass
 class RecipeCandidate:
@@ -58,6 +68,8 @@ def filter_candidates(
     recipes: list[RecipeCandidate], profile: ProfileConstraints
 ) -> list[RecipeCandidate]:
     equipment_set = set(profile.equipment)
+    if "full_kitchen" in equipment_set:
+        equipment_set |= FULL_KITCHEN_EQUIPMENT
     dietary_restrictions = set(profile.dietary_restrictions)
     is_pescatarian = "pescatarian" in dietary_restrictions
     required_diet_tags = dietary_restrictions - {"pescatarian"}
@@ -95,12 +107,27 @@ def solve_weekly_plan(
     locked_recipe_by_slot: dict[tuple[int, str], int | None] | None = None,
     excluded_recipe_by_slot: dict[tuple[int, str], int] | None = None,
     nutrition_tolerance: float = 0.15,
-    time_limit_seconds: float = 10.0,
+    time_limit_seconds: float = 12.0,
+    fallback_time_limit_seconds: float = 30.0,
+    num_search_workers: int = 8,
 ) -> list[MealAssignment]:
     candidates = filter_candidates(recipes, profile)
     if not candidates:
         raise ValueError(
             "No recipes satisfy this profile's equipment, diet, and allergy constraints"
+        )
+
+    if weekly_cook_time_minutes is not None:
+        candidates = [r for r in candidates if r.cook_time_minutes <= weekly_cook_time_minutes]
+        if not candidates:
+            raise ValueError("No recipes fit within the cook time budget")
+
+    required_slots = 7 * len(MEAL_SLOTS) - dining_hall_meals
+    if len(candidates) * max_recipe_repeats < required_slots:
+        raise ValueError(
+            f"Only {len(candidates)} recipes match your equipment, diet, allergy, and "
+            f"cook-time filters - not enough to fill {required_slots} meals this week "
+            "even with repeats. Try loosening one of those filters."
         )
 
     model = cp_model.CpModel()
@@ -170,9 +197,6 @@ def solve_weekly_plan(
     )
     model.Add(total_cost_cents <= _scale_cents(profile.weekly_budget))
 
-    if weekly_cook_time_minutes is not None:
-        model.Add(total("cook_time_minutes") <= weekly_cook_time_minutes)
-
     ingredient_uses: dict[int, list[cp_model.IntVar]] = defaultdict(list)
     for recipe in candidates:
         for ingredient_id, _ in recipe.ingredients:
@@ -212,7 +236,19 @@ def solve_weekly_plan(
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_seconds
+    solver.parameters.num_search_workers = num_search_workers
     status = solver.Solve(model)
+
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        # Tight combinations of constraints (e.g. a low per-meal cook-time cap plus a
+        # narrow calorie band) can be genuinely solvable but too slow to prove within
+        # the time budget above. Fall back to accepting the first valid plan found -
+        # worse ingredient-overlap/preference quality, but a real plan beats none.
+        fallback_solver = cp_model.CpSolver()
+        fallback_solver.parameters.max_time_in_seconds = fallback_time_limit_seconds
+        fallback_solver.parameters.num_search_workers = num_search_workers
+        status = fallback_solver.Solve(model, _StopAtFirstSolution())
+        solver = fallback_solver
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise ValueError("No feasible meal plan found within budget and nutrition targets")

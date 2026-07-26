@@ -58,6 +58,20 @@ def test_filter_candidates_excludes_allergens() -> None:
     assert [r.id for r in candidates] == [2]
 
 
+def test_filter_candidates_full_kitchen_covers_concrete_appliances() -> None:
+    recipes = [
+        make_recipe(1, 2.0, 500, equipment=["stovetop"]),
+        make_recipe(2, 2.0, 500, equipment=["oven"]),
+        make_recipe(3, 2.0, 500, equipment=["microwave"]),
+        make_recipe(4, 2.0, 500, equipment=["full_kitchen"]),
+    ]
+    profile = ProfileConstraints(weekly_budget=100, equipment=["full_kitchen"])
+
+    candidates = filter_candidates(recipes, profile)
+
+    assert {r.id for r in candidates} == {1, 2, 3, 4}
+
+
 def test_meal_slots_includes_snack() -> None:
     assert MEAL_SLOTS == ["breakfast", "lunch", "dinner", "snack"]
 
@@ -75,6 +89,19 @@ def test_filter_candidates_pescatarian_excludes_land_meat_allows_fish() -> None:
     candidates = filter_candidates(recipes, profile)
 
     assert {r.id for r in candidates} == {2, 3}
+
+
+def test_solve_weekly_plan_raises_clear_error_when_too_few_candidates() -> None:
+    # 3 candidates * default max_recipe_repeats=3 = 9, far short of the 28 slots needed -
+    # this should fail fast with a message naming the shortfall, not a generic solver error.
+    recipes = [make_recipe(i, cost=2.0, calories=600) for i in range(1, 4)]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    try:
+        solve_weekly_plan(recipes, profile)
+        assert False, "expected ValueError for too few candidates"
+    except ValueError as exc:
+        assert "Only 3 recipes" in str(exc)
 
 
 def test_solve_weekly_plan_respects_budget() -> None:
@@ -145,6 +172,8 @@ def test_solve_weekly_plan_respects_dining_hall_meals_count() -> None:
 
 
 def test_solve_weekly_plan_raises_when_cook_time_budget_too_tight() -> None:
+    # weekly_cook_time_minutes is a per-recipe cap - every candidate recipe takes longer
+    # than the cap, so nothing is eligible regardless of how many meals are needed.
     recipes = [make_recipe(1, cost=1.0, calories=600, cook_time_minutes=60)]
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
@@ -154,11 +183,27 @@ def test_solve_weekly_plan_raises_when_cook_time_budget_too_tight() -> None:
             profile,
             max_recipe_repeats=7 * len(MEAL_SLOTS),
             dining_hall_meals=10,
-            weekly_cook_time_minutes=300,
+            weekly_cook_time_minutes=30,
         )
         assert False, "expected ValueError for infeasible cook-time budget"
     except ValueError:
         pass
+
+
+def test_solve_weekly_plan_cook_time_budget_filters_per_recipe_not_weekly_sum() -> None:
+    # A 60-minute-per-meal cap should NOT reject a plan just because 28 meals' cook
+    # times summed together exceed 60 - the cap applies per recipe, not to the total.
+    recipes = [make_recipe(1, cost=1.0, calories=2000, cook_time_minutes=45)]
+    profile = ProfileConstraints(weekly_budget=1000, equipment=[])
+
+    assignments = solve_weekly_plan(
+        recipes,
+        profile,
+        max_recipe_repeats=7 * len(MEAL_SLOTS),
+        weekly_cook_time_minutes=60,
+    )
+
+    assert len(assignments) == 7 * len(MEAL_SLOTS)
 
 
 def test_solve_weekly_plan_favors_recipe_using_pantry_ingredients() -> None:
