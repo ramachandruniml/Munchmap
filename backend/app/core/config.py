@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     kafka_bootstrap_servers: str = "localhost:9092"
 
-    gemini_api_key: str = ""
     supabase_url: str = ""
 
     cors_origins: list[str] = ["http://localhost:3000"]

@@ -8,10 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
-import type { Profile } from "@/lib/types";
-
-const EQUIPMENT_OPTIONS = ["microwave", "mini_fridge", "hot_plate", "stovetop", "oven", "full_kitchen"];
-const DIET_OPTIONS = ["vegetarian", "vegan", "gluten-free", "dairy-free", "low-carb"];
+import { DIET_OPTIONS, EQUIPMENT_OPTIONS, type Profile } from "@/lib/types";
 
 function toggle(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];

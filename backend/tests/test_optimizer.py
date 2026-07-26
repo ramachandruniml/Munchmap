@@ -58,11 +58,30 @@ def test_filter_candidates_excludes_allergens() -> None:
     assert [r.id for r in candidates] == [2]
 
 
+def test_meal_slots_includes_snack() -> None:
+    assert MEAL_SLOTS == ["breakfast", "lunch", "dinner", "snack"]
+
+
+def test_filter_candidates_pescatarian_excludes_land_meat_allows_fish() -> None:
+    recipes = [
+        make_recipe(1, 2.0, 500, ingredients=[(1, "chicken breast")]),
+        make_recipe(2, 2.0, 500, ingredients=[(2, "salmon fillet")]),
+        make_recipe(3, 2.0, 500, ingredients=[(3, "broccoli")]),
+    ]
+    profile = ProfileConstraints(
+        weekly_budget=100, equipment=[], dietary_restrictions=["pescatarian"]
+    )
+
+    candidates = filter_candidates(recipes, profile)
+
+    assert {r.id for r in candidates} == {2, 3}
+
+
 def test_solve_weekly_plan_respects_budget() -> None:
     recipes = [make_recipe(i, cost=2.0, calories=600) for i in range(1, 8)]
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
-    assignments = solve_weekly_plan(recipes, profile)
+    assignments = solve_weekly_plan(recipes, profile, max_recipe_repeats=7 * len(MEAL_SLOTS))
 
     assert len(assignments) == 7 * len(MEAL_SLOTS)
     total_cost = sum(a.cost for a in assignments)
@@ -88,7 +107,7 @@ def test_solve_weekly_plan_minimizes_distinct_ingredients() -> None:
     ]
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
-    assignments = solve_weekly_plan(shared, profile, max_recipe_repeats=21)
+    assignments = solve_weekly_plan(shared, profile, max_recipe_repeats=7 * len(MEAL_SLOTS))
 
     used_recipe_ids = {a.recipe_id for a in assignments}
     assert used_recipe_ids.issubset({1, 2})
@@ -103,7 +122,7 @@ def test_solve_weekly_plan_favors_higher_preference_score() -> None:
     ]
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
-    assignments = solve_weekly_plan(recipes, profile, max_recipe_repeats=21)
+    assignments = solve_weekly_plan(recipes, profile, max_recipe_repeats=7 * len(MEAL_SLOTS))
 
     recipe_2_count = sum(1 for a in assignments if a.recipe_id == 2)
     assert recipe_2_count == len(assignments)
@@ -113,13 +132,15 @@ def test_solve_weekly_plan_respects_dining_hall_meals_count() -> None:
     recipes = [make_recipe(i, cost=2.0, calories=600) for i in range(1, 8)]
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
-    assignments = solve_weekly_plan(recipes, profile, dining_hall_meals=5)
+    assignments = solve_weekly_plan(
+        recipes, profile, max_recipe_repeats=7 * len(MEAL_SLOTS), dining_hall_meals=5
+    )
 
     dining_hall_assignments = [a for a in assignments if a.is_dining_hall]
     cooked_assignments = [a for a in assignments if not a.is_dining_hall]
     assert len(dining_hall_assignments) == 5
     assert all(a.recipe_id is None and a.cost == 0.0 for a in dining_hall_assignments)
-    assert len(cooked_assignments) == 21 - 5
+    assert len(cooked_assignments) == 7 * len(MEAL_SLOTS) - 5
     assert all(a.recipe_id is not None for a in cooked_assignments)
 
 
@@ -131,7 +152,7 @@ def test_solve_weekly_plan_raises_when_cook_time_budget_too_tight() -> None:
         solve_weekly_plan(
             recipes,
             profile,
-            max_recipe_repeats=21,
+            max_recipe_repeats=7 * len(MEAL_SLOTS),
             dining_hall_meals=10,
             weekly_cook_time_minutes=300,
         )
@@ -150,7 +171,7 @@ def test_solve_weekly_plan_favors_recipe_using_pantry_ingredients() -> None:
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
     assignments = solve_weekly_plan(
-        recipes, profile, max_recipe_repeats=21, pantry_ingredient_ids=frozenset({200})
+        recipes, profile, max_recipe_repeats=7 * len(MEAL_SLOTS), pantry_ingredient_ids=frozenset({200})
     )
 
     recipe_2_count = sum(1 for a in assignments if a.recipe_id == 2)
@@ -162,7 +183,10 @@ def test_solve_weekly_plan_locks_slot_to_requested_recipe() -> None:
     profile = ProfileConstraints(weekly_budget=1000, equipment=[])
 
     assignments = solve_weekly_plan(
-        recipes, profile, locked_recipe_by_slot={(0, "breakfast"): 3}
+        recipes,
+        profile,
+        max_recipe_repeats=7 * len(MEAL_SLOTS),
+        locked_recipe_by_slot={(0, "breakfast"): 3},
     )
 
     locked = next(a for a in assignments if a.day_of_week == 0 and a.meal_slot == "breakfast")
@@ -181,7 +205,7 @@ def test_solve_weekly_plan_excludes_recipe_from_slot() -> None:
     assignments = solve_weekly_plan(
         recipes,
         profile,
-        max_recipe_repeats=21,
+        max_recipe_repeats=7 * len(MEAL_SLOTS),
         excluded_recipe_by_slot={(0, "breakfast"): 2},
     )
 

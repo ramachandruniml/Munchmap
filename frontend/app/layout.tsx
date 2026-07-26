@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Baloo_2, Nunito } from "next/font/google";
+import { NavBar } from "@/components/nav-bar";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -28,7 +29,10 @@ export default function RootLayout({
       lang="en"
       className={`${nunito.variable} ${baloo2.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <NavBar />
+        {children}
+      </body>
     </html>
   );
 }

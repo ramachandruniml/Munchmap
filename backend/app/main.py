@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api.routes import (
-    dining,
     grocery_lists,
     health,
     ingredients,
@@ -34,5 +33,4 @@ app.include_router(meal_plans.router, prefix="/api")
 app.include_router(grocery_lists.router, prefix="/api")
 app.include_router(pantry.router, prefix="/api")
 app.include_router(recipes.router, prefix="/api")
-app.include_router(dining.router, prefix="/api")
 app.include_router(ingredients.router, prefix="/api")

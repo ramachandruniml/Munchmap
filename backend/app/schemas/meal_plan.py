@@ -8,6 +8,8 @@ class MealPlanGenerateRequest(BaseModel):
     max_recipe_repeats: int = 3
     dining_hall_meals: int = 0
     weekly_cook_time_minutes: int | None = None
+    weekly_budget: float | None = None
+    dietary_restrictions: list[str] | None = None
 
 
 class MealPlanEntryOut(BaseModel):
@@ -18,6 +20,7 @@ class MealPlanEntryOut(BaseModel):
     recipe_name: str | None
     cost: float
     is_dining_hall: bool
+    cook_time_minutes: int | None
 
 
 class MealPlanOut(BaseModel):

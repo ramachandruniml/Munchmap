@@ -103,11 +103,17 @@ async def _load_candidates(
     return candidates, pantry_ingredient_ids
 
 
-def _constraints_from_profile(profile: Profile) -> ProfileConstraints:
+def _constraints_from_profile(
+    profile: Profile,
+    weekly_budget: float | None = None,
+    dietary_restrictions: list[str] | None = None,
+) -> ProfileConstraints:
     return ProfileConstraints(
-        weekly_budget=float(profile.weekly_budget),
+        weekly_budget=weekly_budget if weekly_budget is not None else float(profile.weekly_budget),
         equipment=profile.equipment,
-        dietary_restrictions=profile.dietary_restrictions,
+        dietary_restrictions=(
+            dietary_restrictions if dietary_restrictions is not None else profile.dietary_restrictions
+        ),
         allergies=profile.allergies,
         dislikes=profile.dislikes,
         calorie_target=profile.calorie_target,
@@ -144,7 +150,7 @@ async def _get_owned_meal_plan(
 
 async def _serialize_meal_plan(db: AsyncSession, meal_plan: MealPlan) -> MealPlanOut:
     result = await db.execute(
-        select(MealPlanEntry, Recipe.name)
+        select(MealPlanEntry, Recipe.name, Recipe.cook_time_minutes)
         .outerjoin(Recipe, Recipe.id == MealPlanEntry.recipe_id)
         .where(MealPlanEntry.meal_plan_id == meal_plan.id)
         .order_by(MealPlanEntry.day_of_week, MealPlanEntry.meal_slot)
@@ -158,8 +164,9 @@ async def _serialize_meal_plan(db: AsyncSession, meal_plan: MealPlan) -> MealPla
             recipe_name=name,
             cost=float(entry.cost),
             is_dining_hall=entry.is_dining_hall,
+            cook_time_minutes=cook_time_minutes,
         )
-        for entry, name in result.all()
+        for entry, name, cook_time_minutes in result.all()
     ]
     return MealPlanOut(
         id=meal_plan.id,
@@ -180,7 +187,11 @@ async def generate_meal_plan(
 ) -> MealPlanOut:
     profile = await _load_profile(db, user.id)
     candidates, pantry_ingredient_ids = await _load_candidates(db, user.id)
-    constraints = _constraints_from_profile(profile)
+    constraints = _constraints_from_profile(
+        profile,
+        weekly_budget=payload.weekly_budget,
+        dietary_restrictions=payload.dietary_restrictions,
+    )
 
     try:
         assignments = solve_weekly_plan(

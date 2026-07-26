@@ -16,6 +16,7 @@ class GroceryListOut(BaseModel):
     meal_plan_id: int
     items: list[GroceryListItemOut]
     total_cost: float
+    weekly_budget: float
 
 
 class ToggleItemRequest(BaseModel):

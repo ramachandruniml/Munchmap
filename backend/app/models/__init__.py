@@ -1,5 +1,4 @@
 from app.models.base import Base
-from app.models.dining import DiningHall, Menu, MenuItem
 from app.models.grocery_list import GroceryList, GroceryListItem
 from app.models.meal_plan import MealPlan, MealPlanEntry
 from app.models.pantry import PantryItem
@@ -18,8 +17,5 @@ __all__ = [
     "GroceryList",
     "GroceryListItem",
     "PantryItem",
-    "DiningHall",
-    "Menu",
-    "MenuItem",
     "RecipeRating",
 ]

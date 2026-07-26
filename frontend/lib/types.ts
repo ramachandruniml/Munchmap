@@ -14,11 +14,12 @@ export interface Profile {
 export interface MealPlanEntry {
   id: number;
   day_of_week: number;
-  meal_slot: "breakfast" | "lunch" | "dinner";
+  meal_slot: "breakfast" | "lunch" | "dinner" | "snack";
   recipe_id: number | null;
   recipe_name: string | null;
   cost: number;
   is_dining_hall: boolean;
+  cook_time_minutes: number | null;
 }
 
 export interface MealPlan {
@@ -46,6 +47,7 @@ export interface GroceryList {
   meal_plan_id: number;
   items: GroceryListItem[];
   total_cost: number;
+  weekly_budget: number;
 }
 
 export interface PantryItem {
@@ -73,21 +75,33 @@ export interface RecipeSearchResult {
   protein_g: number;
   carb_g: number;
   fat_g: number;
+  cook_time_minutes: number;
   diet_tags: string[];
+  liked: boolean | null;
 }
 
-export interface MenuItem {
+export interface RecipeIngredient {
+  ingredient_id: number;
+  name: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface RecipeDetail {
   id: number;
   name: string;
-  station: string;
+  instructions: string;
+  cook_time_minutes: number;
+  servings: number;
+  cost_per_serving: number;
+  calories: number;
+  protein_g: number;
+  carb_g: number;
+  fat_g: number;
+  equipment_required: string[];
   diet_tags: string[];
-}
-
-export interface Menu {
-  id: number;
-  dining_hall_name: string;
-  menu_date: string;
-  items: MenuItem[];
+  ingredients: RecipeIngredient[];
+  liked: boolean | null;
 }
 
 export interface Substitute {
@@ -103,4 +117,20 @@ export interface IngredientSubstitutes {
 }
 
 export const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-export const MEAL_SLOTS = ["breakfast", "lunch", "dinner"] as const;
+export const MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"] as const;
+export const DIET_OPTIONS = [
+  "vegetarian",
+  "vegan",
+  "pescatarian",
+  "gluten-free",
+  "dairy-free",
+  "low-carb",
+];
+export const EQUIPMENT_OPTIONS = [
+  "microwave",
+  "mini_fridge",
+  "hot_plate",
+  "stovetop",
+  "oven",
+  "full_kitchen",
+];

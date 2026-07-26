@@ -1,16 +1,16 @@
 # Munchmap
 
 AI-powered, constraint-based meal planning for college students. Given a budget, dietary
-restrictions, dorm equipment, and campus dining menus, Munchmap generates an optimized weekly
-meal plan that minimizes cost and ingredient waste while hitting nutrition targets.
+restrictions, and dorm equipment, Munchmap generates an optimized weekly meal plan that minimizes
+cost and ingredient waste while hitting nutrition targets.
 
 **Current status**: the core loop and all originally-planned features are implemented - sign up,
-complete onboarding (budget/diet/equipment), generate an OR-Tools-optimized weekly meal plan, get
-a consolidated grocery list (pantry-aware), track pantry items, semantically search recipes,
-paste-and-parse dining-hall menus via Gemini, rate recipes to personalize future plans, and
-Prometheus/Grafana observability. The Redpanda queue is still scaffolded but unused, and the Arq
-worker's two jobs remain placeholders (no automatic dining-menu scraper - menus are added via the
-manual paste endpoint instead).
+complete onboarding (budget/diet/equipment), generate an OR-Tools-optimized weekly meal plan
+(breakfast/lunch/dinner/snack, optionally balanced against dining-hall meals), get a consolidated
+grocery list with a budget comparison (pantry-aware), track pantry items (including barcode
+scanning), semantically search and browse recipes with full cooking instructions, favorite/rate
+recipes to personalize future plans, and Prometheus/Grafana observability. The Redpanda queue is
+still scaffolded but unused, and the Arq worker's `solve_meal_plan` job remains a placeholder.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ manual paste endpoint instead).
 | Auth | Supabase Auth (backend verifies JWTs via Supabase's JWKS endpoint) |
 | Optimization engine | Google OR-Tools CP-SAT |
 | Database | PostgreSQL (hosted by Supabase) + pgvector (recipe embeddings) |
-| ML | sentence-transformers (recipe-discovery embeddings), Gemini API (`gemini-flash-latest`, dining-menu parsing) |
+| ML | sentence-transformers (recipe-discovery embeddings + ingredient substitution) |
 | Queue (scaffolded, unused so far) | Redpanda (Kafka-compatible) |
 | Cache | Redis |
 | Workers | Arq |

@@ -12,6 +12,5 @@ aiokafka>=0.12
 ortools>=9.11
 sentence-transformers>=3.3
 pgvector>=0.3
-google-genai>=1.0
 prometheus-fastapi-instrumentator>=7.0
 structlog>=24.4

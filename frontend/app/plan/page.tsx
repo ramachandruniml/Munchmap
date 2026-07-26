@@ -5,10 +5,11 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
-import { DAY_LABELS, MEAL_SLOTS, type MealPlan } from "@/lib/types";
+import { DAY_LABELS, DIET_OPTIONS, MEAL_SLOTS, type MealPlan, type Profile } from "@/lib/types";
 
 function nextMonday(): string {
   const today = new Date();
@@ -19,6 +20,10 @@ function nextMonday(): string {
   return monday.toISOString().slice(0, 10);
 }
 
+function toggle(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
 export default function PlanPage() {
   const [plans, setPlans] = useState<MealPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +32,8 @@ export default function PlanPage() {
   const [ratings, setRatings] = useState<Record<number, boolean>>({});
   const [diningHallMeals, setDiningHallMeals] = useState("0");
   const [cookTimeMinutes, setCookTimeMinutes] = useState("");
+  const [weeklyBudget, setWeeklyBudget] = useState("");
+  const [dietaryRestrictions, setDietaryRestrictions] = useState<string[]>([]);
   const [swappingEntryId, setSwappingEntryId] = useState<number | null>(null);
 
   async function handleRate(recipeId: number, liked: boolean) {
@@ -67,6 +74,15 @@ export default function PlanPage() {
         setError(err instanceof Error ? err.message : "Failed to load meal plans"),
       )
       .finally(() => setLoading(false));
+
+    apiFetch<Profile>("/profile")
+      .then((profile) => {
+        setWeeklyBudget(String(profile.weekly_budget));
+        setDietaryRestrictions(profile.dietary_restrictions);
+      })
+      .catch(() => {
+        // No profile yet - onboarding hasn't been completed.
+      });
   }, []);
 
   async function handleGenerate() {
@@ -79,6 +95,8 @@ export default function PlanPage() {
           week_start_date: nextMonday(),
           dining_hall_meals: Number(diningHallMeals) || 0,
           weekly_cook_time_minutes: cookTimeMinutes ? Number(cookTimeMinutes) : null,
+          weekly_budget: weeklyBudget ? Number(weeklyBudget) : null,
+          dietary_restrictions: dietaryRestrictions,
         }),
       });
       const data = await apiFetch<MealPlan[]>("/meal-plans");
@@ -94,50 +112,74 @@ export default function PlanPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-heading text-2xl font-bold">Your meal plan</h1>
-        <div className="flex items-center gap-3">
-          <Link href="/pantry" className="text-sm underline">
-            Pantry
-          </Link>
-          <Link href="/recipes" className="text-sm underline">
-            Discover recipes
-          </Link>
-          <Link href="/dining" className="text-sm underline">
-            Dining menus
-          </Link>
-        </div>
-      </div>
+      <h1 className="font-heading text-2xl font-bold">Your meal plan</h1>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="dining-hall-meals">Dining hall meals this week</Label>
-          <Input
-            id="dining-hall-meals"
-            type="number"
-            min="0"
-            max="21"
-            className="w-28"
-            value={diningHallMeals}
-            onChange={(event) => setDiningHallMeals(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="cook-time-minutes">Cook time budget (min, optional)</Label>
-          <Input
-            id="cook-time-minutes"
-            type="number"
-            min="0"
-            className="w-36"
-            placeholder="No limit"
-            value={cookTimeMinutes}
-            onChange={(event) => setCookTimeMinutes(event.target.value)}
-          />
-        </div>
-        <Button onClick={handleGenerate} disabled={generating}>
-          {generating ? "Generating..." : "Generate this week's plan"}
-        </Button>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Weekly constraints</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="weekly-budget">Money budget ($)</Label>
+              <Input
+                id="weekly-budget"
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-28"
+                value={weeklyBudget}
+                onChange={(event) => setWeeklyBudget(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="cook-time-minutes">Cook time budget (min, optional)</Label>
+              <Input
+                id="cook-time-minutes"
+                type="number"
+                min="0"
+                className="w-36"
+                placeholder="No limit"
+                value={cookTimeMinutes}
+                onChange={(event) => setCookTimeMinutes(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="dining-hall-meals">Dining hall meals this week</Label>
+              <Input
+                id="dining-hall-meals"
+                type="number"
+                min="0"
+                max="28"
+                className="w-28"
+                value={diningHallMeals}
+                onChange={(event) => setDiningHallMeals(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Dietary preference</Label>
+            <div className="flex flex-wrap gap-3">
+              {DIET_OPTIONS.map((option) => (
+                <label key={option} className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={dietaryRestrictions.includes(option)}
+                    onCheckedChange={() =>
+                      setDietaryRestrictions((prev) => toggle(prev, option))
+                    }
+                  />
+                  {option}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <Button onClick={handleGenerate} disabled={generating} className="self-start">
+            {generating ? "Generating..." : "Generate this week's plan"}
+          </Button>
+        </CardContent>
+      </Card>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
       {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
@@ -177,13 +219,21 @@ export default function PlanPage() {
                     return (
                       <div key={slot} className="text-xs">
                         <div className="font-medium capitalize">{slot}</div>
-                        <div className="text-muted-foreground">
-                          {entry?.is_dining_hall
-                            ? "Dining hall"
-                            : entry
-                              ? `${entry.recipe_name} - $${entry.cost.toFixed(2)}`
-                              : "-"}
-                        </div>
+                        {entry?.is_dining_hall ? (
+                          <div className="text-muted-foreground">Dining hall</div>
+                        ) : entry && entry.recipe_id !== null ? (
+                          <Link
+                            href={`/recipes/${entry.recipe_id}`}
+                            className="text-muted-foreground underline"
+                          >
+                            {entry.recipe_name} - ${entry.cost.toFixed(2)}
+                            {entry.cook_time_minutes !== null && (
+                              <> &middot; {entry.cook_time_minutes} min</>
+                            )}
+                          </Link>
+                        ) : (
+                          <div className="text-muted-foreground">-</div>
+                        )}
                         {entry && !entry.is_dining_hall && entry.recipe_id !== null && (
                           <div className="mt-1 flex gap-1">
                             <Button

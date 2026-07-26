@@ -77,7 +77,16 @@ export default function GroceryListPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Items</CardTitle>
-            <Badge variant="secondary">${groceryList.total_cost.toFixed(2)} total</Badge>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={
+                  groceryList.total_cost <= groceryList.weekly_budget ? "secondary" : "destructive"
+                }
+              >
+                ${groceryList.total_cost.toFixed(2)} of ${groceryList.weekly_budget.toFixed(2)}{" "}
+                budget
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {groceryList.items.map((item) => (

@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import CurrentUser, get_current_user
@@ -13,6 +14,7 @@ from app.models import (
     MealPlan,
     MealPlanEntry,
     PantryItem,
+    Profile,
     RecipeIngredient,
 )
 from app.schemas.grocery_list import GroceryListItemOut, GroceryListOut, ToggleItemRequest
@@ -40,7 +42,9 @@ async def _get_owned_grocery_list(
     return grocery_list
 
 
-async def _serialize(db: AsyncSession, grocery_list: GroceryList) -> GroceryListOut:
+async def _serialize(
+    db: AsyncSession, grocery_list: GroceryList, weekly_budget: float
+) -> GroceryListOut:
     result = await db.execute(
         select(GroceryListItem, Ingredient.name)
         .join(Ingredient, Ingredient.id == GroceryListItem.ingredient_id)
@@ -64,6 +68,7 @@ async def _serialize(db: AsyncSession, grocery_list: GroceryList) -> GroceryList
         meal_plan_id=grocery_list.meal_plan_id,
         items=items,
         total_cost=round(sum(i.estimated_cost for i in items), 2),
+        weekly_budget=weekly_budget,
     )
 
 
@@ -74,12 +79,14 @@ async def generate_grocery_list(
     db: AsyncSession = Depends(get_db),
 ) -> GroceryListOut:
     await _get_owned_meal_plan(db, meal_plan_id, user.id)
+    profile = await db.get(Profile, user.id)
+    weekly_budget = float(profile.weekly_budget)
 
     existing = await db.scalar(
         select(GroceryList).where(GroceryList.meal_plan_id == meal_plan_id)
     )
     if existing is not None:
-        return await _serialize(db, existing)
+        return await _serialize(db, existing, weekly_budget)
 
     result = await db.execute(
         select(RecipeIngredient, Ingredient.unit_cost)
@@ -117,9 +124,19 @@ async def generate_grocery_list(
         for line in grocery_lines
     ]
     db.add(grocery_list)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Concurrent request already created it (e.g. React StrictMode's double effect
+        # invocation in dev) - fall back to returning the one that won the race.
+        await db.rollback()
+        existing = await db.scalar(
+            select(GroceryList).where(GroceryList.meal_plan_id == meal_plan_id)
+        )
+        return await _serialize(db, existing, weekly_budget)
+
     await db.refresh(grocery_list)
-    return await _serialize(db, grocery_list)
+    return await _serialize(db, grocery_list, weekly_budget)
 
 
 @router.get("/grocery-lists/{grocery_list_id}", response_model=GroceryListOut)
@@ -129,7 +146,8 @@ async def get_grocery_list(
     db: AsyncSession = Depends(get_db),
 ) -> GroceryListOut:
     grocery_list = await _get_owned_grocery_list(db, grocery_list_id, user.id)
-    return await _serialize(db, grocery_list)
+    profile = await db.get(Profile, user.id)
+    return await _serialize(db, grocery_list, float(profile.weekly_budget))
 
 
 @router.patch(

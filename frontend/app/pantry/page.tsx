@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { BarcodeScanner } from "@/components/barcode-scanner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +9,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
 import type { ExpiringRecipe, PantryItem } from "@/lib/types";
+
+interface OpenFoodFactsResponse {
+  status: number;
+  product?: { product_name?: string };
+}
+
+async function lookupBarcode(barcode: string): Promise<string> {
+  const response = await fetch(
+    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`,
+  );
+  if (response.ok) {
+    const data: OpenFoodFactsResponse = await response.json();
+    if (data.status === 1 && data.product?.product_name) {
+      return data.product.product_name;
+    }
+  }
+  return `Scanned item ${barcode}`;
+}
 
 function isExpiringSoon(expiresAt: string | null): boolean {
   if (!expiresAt) return false;
@@ -26,6 +45,8 @@ export default function PantryPage() {
   const [unit, setUnit] = useState("each");
   const [expiresAt, setExpiresAt] = useState("");
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState<string | null>(null);
 
   function loadItems() {
     return apiFetch<PantryItem[]>("/pantry")
@@ -98,6 +119,28 @@ export default function PantryPage() {
     }
   }
 
+  async function handleBarcodeScan(barcode: string) {
+    setScanning(false);
+    setScanStatus(`Looking up ${barcode}...`);
+    try {
+      const productName = await lookupBarcode(barcode);
+      await apiFetch("/pantry", {
+        method: "POST",
+        body: JSON.stringify({
+          ingredient_name: productName,
+          quantity: 1,
+          unit: "each",
+          expires_at: null,
+        }),
+      });
+      setScanStatus(`Added "${productName}" to your pantry.`);
+      await Promise.all([loadItems(), loadExpiringRecipes()]);
+    } catch (err) {
+      setScanStatus(null);
+      setError(err instanceof Error ? err.message : "Failed to log scanned item");
+    }
+  }
+
   async function handleDelete(item: PantryItem) {
     try {
       await apiFetch(`/pantry/${item.id}`, { method: "DELETE" });
@@ -115,10 +158,19 @@ export default function PantryPage() {
       </p>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Add an item</CardTitle>
+          {!scanning && (
+            <Button type="button" variant="outline" onClick={() => setScanning(true)}>
+              Scan barcode
+            </Button>
+          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          {scanning && (
+            <BarcodeScanner onScan={handleBarcodeScan} onClose={() => setScanning(false)} />
+          )}
+          {scanStatus && <p className="text-sm text-muted-foreground">{scanStatus}</p>}
           <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="ingredient-name">Ingredient</Label>

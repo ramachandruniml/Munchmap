@@ -1,5 +1,7 @@
 "use client";
 
+import { Heart } from "lucide-react";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,11 +35,29 @@ export default function RecipesPage() {
     }
   }
 
+  async function handleFavorite(event: React.MouseEvent, recipe: RecipeSearchResult) {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextLiked = recipe.liked !== true;
+    try {
+      await apiFetch(`/recipes/${recipe.id}/rating`, {
+        method: "POST",
+        body: JSON.stringify({ liked: nextLiked }),
+      });
+      setResults((prev) =>
+        prev.map((r) => (r.id === recipe.id ? { ...r, liked: nextLiked } : r)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update favorite");
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
       <h1 className="font-heading text-2xl font-bold">Discover recipes</h1>
       <p className="text-sm text-muted-foreground">
-        Describe what you&apos;re craving and find matching recipes from the catalog.
+        Describe what you&apos;re craving and find matching recipes from the catalog. Click a
+        recipe for the full instructions, or favorite it to shape future weekly plans.
       </p>
 
       <form onSubmit={handleSearch} className="flex gap-3">
@@ -60,24 +80,37 @@ export default function RecipesPage() {
       {results.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
           {results.map((recipe) => (
-            <Card key={recipe.id}>
-              <CardHeader>
-                <CardTitle className="text-base">{recipe.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <Badge variant="secondary">${recipe.cost_per_serving.toFixed(2)}/serving</Badge>
-                  <Badge variant="secondary">{recipe.calories} cal</Badge>
-                  {recipe.diet_tags.map((tag) => (
-                    <Badge key={tag} variant="secondary">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {recipe.protein_g}g protein · {recipe.carb_g}g carbs · {recipe.fat_g}g fat
-                </div>
-              </CardContent>
+            <Card key={recipe.id} className="relative">
+              <Button
+                type="button"
+                variant={recipe.liked === true ? "default" : "outline"}
+                size="icon-sm"
+                className="absolute top-3 right-3 z-10"
+                aria-label="Favorite this recipe"
+                onClick={(event) => handleFavorite(event, recipe)}
+              >
+                <Heart className={recipe.liked === true ? "fill-current" : ""} />
+              </Button>
+              <Link href={`/recipes/${recipe.id}`} className="block">
+                <CardHeader>
+                  <CardTitle className="pr-8 text-base">{recipe.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <Badge variant="secondary">${recipe.cost_per_serving.toFixed(2)}/serving</Badge>
+                    <Badge variant="secondary">{recipe.calories} cal</Badge>
+                    <Badge variant="secondary">{recipe.cook_time_minutes} min</Badge>
+                    {recipe.diet_tags.map((tag) => (
+                      <Badge key={tag} variant="secondary">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {recipe.protein_g}g protein · {recipe.carb_g}g carbs · {recipe.fat_g}g fat
+                  </div>
+                </CardContent>
+              </Link>
             </Card>
           ))}
         </div>

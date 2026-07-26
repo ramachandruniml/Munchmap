@@ -3,8 +3,17 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 
-MEAL_SLOTS = ["breakfast", "lunch", "dinner"]
+MEAL_SLOTS = ["breakfast", "lunch", "dinner", "snack"]
 DAYS = range(7)
+
+# "pescatarian" has no matching tag in the seeded recipe data, so it's enforced as an
+# ingredient exclusion (like allergies/dislikes) rather than a required diet_tag - land
+# meat is excluded, fish/seafood and everything else stays eligible.
+PESCATARIAN_EXCLUDED_INGREDIENTS = {
+    "beef", "pork", "chicken", "turkey", "lamb", "bacon", "sausage", "ham",
+    "veal", "duck", "goose", "venison", "steak", "meatball", "prosciutto",
+    "pepperoni", "salami", "chorizo",
+}
 
 
 @dataclass
@@ -49,8 +58,12 @@ def filter_candidates(
     recipes: list[RecipeCandidate], profile: ProfileConstraints
 ) -> list[RecipeCandidate]:
     equipment_set = set(profile.equipment)
-    required_diet_tags = set(profile.dietary_restrictions)
+    dietary_restrictions = set(profile.dietary_restrictions)
+    is_pescatarian = "pescatarian" in dietary_restrictions
+    required_diet_tags = dietary_restrictions - {"pescatarian"}
     excluded = {a.lower() for a in (*profile.allergies, *profile.dislikes)}
+    if is_pescatarian:
+        excluded |= PESCATARIAN_EXCLUDED_INGREDIENTS
 
     candidates = []
     for recipe in recipes:
